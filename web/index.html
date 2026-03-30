@@ -195,6 +195,10 @@
       </div>
 
       <div class="status info" id="status"></div>
+      <div class="actions" id="jobActions" style="display:none;">
+        <button type="button" class="btn-secondary" id="btnDownloadZip">ZIP indir</button>
+      </div>
+      <pre class="meta" id="reportPreview" style="display:none;"></pre>
       <pre class="meta" id="metaPreview" style="display:none;"></pre>
     </div>
   </div>
@@ -210,6 +214,10 @@
     const btnHealth = document.getElementById("btnHealth");
     const statusEl = document.getElementById("status");
     const metaPreview = document.getElementById("metaPreview");
+    const reportPreview = document.getElementById("reportPreview");
+    const jobActions = document.getElementById("jobActions");
+    const btnDownloadZip = document.getElementById("btnDownloadZip");
+    let activeJobId = null;
 
     function normalizeBase(u) {
       return (u || "").trim().replace(/\/+$/, "");
@@ -266,6 +274,49 @@
     function hideMeta() {
       metaPreview.style.display = "none";
       metaPreview.textContent = "";
+      reportPreview.style.display = "none";
+      reportPreview.textContent = "";
+      jobActions.style.display = "none";
+    }
+
+    function renderJob(job) {
+      if (!job) return;
+      const parts = ["Job: " + job.id, "Durum: " + job.status];
+      if (job.modalJobId) parts.push("Modal job: " + job.modalJobId);
+      if (job.modalSavedPaths) parts.push("Modal kayıt: " + String(job.modalSavedPaths));
+      if (job.status === "done") {
+        setStatus("ok", parts.join(" | "));
+      } else if (job.status === "error") {
+        setStatus("err", parts.join(" | ") + " | Hata: " + (job.error || "bilinmiyor"));
+      } else {
+        setStatus("info", parts.join(" | "));
+      }
+
+      if (job.metadata) {
+        metaPreview.textContent = JSON.stringify(job.metadata, null, 2);
+        metaPreview.style.display = "block";
+      }
+      if (job.reportMarkdown) {
+        reportPreview.textContent = job.reportMarkdown;
+        reportPreview.style.display = "block";
+      }
+      if (job.id) {
+        jobActions.style.display = "flex";
+      }
+    }
+
+    async function pollJob(jobId) {
+      activeJobId = jobId;
+      for (;;) {
+        const res = await fetch("/api/jobs/" + encodeURIComponent(jobId), {
+          credentials: "omit",
+        });
+        const job = await res.json();
+        if (!res.ok) throw new Error(job.error || ("Job okunamadı: " + res.status));
+        renderJob(job);
+        if (job.status === "done" || job.status === "error") return job;
+        await new Promise((r) => setTimeout(r, 2500));
+      }
     }
 
     btnHealth.addEventListener("click", async () => {
@@ -322,94 +373,35 @@
       if (apiKey.value) localStorage.setItem(LS_KEY, apiKey.value);
 
       hideMeta();
-      setStatus("info", "Gönderiliyor… Model soğuksa birkaç dakika sürebilir, pencereyi kapatma.");
+      setStatus("info", "Gönderiliyor… Modal çıktısı alınıp Claude raporu asenkron hazırlanacak.");
       btnRun.disabled = true;
       btnHealth.disabled = true;
 
       const form = new FormData();
       form.append("file", f, f.name);
+      form.append("modalBaseUrl", base);
 
       const headers = {};
       const k = apiKey.value.trim();
       if (k) headers["X-API-Key"] = k;
 
       try {
-        const res = await fetch(base + "/predict", {
+        const res = await fetch("/api/predict-and-report", {
           method: "POST",
           body: form,
           headers,
           credentials: "omit",
         });
-        const blob = await res.blob();
+        const out = await res.json().catch(() => ({}));
         if (!res.ok) {
-          const t = await blob.text();
-          let detail = t;
-          try {
-            const j = JSON.parse(t);
-            if (Array.isArray(j.detail)) {
-              detail = j.detail.map((x) => x.msg || JSON.stringify(x)).join("; ");
-            } else {
-              detail = j.detail || t;
-            }
-          } catch {
-            /* plain text body */
-          }
-          throw new Error(res.status + " " + detail);
+          throw new Error(res.status + " " + (out.error || "İstek başarısız"));
         }
 
-        const jobId = res.headers.get("X-Tribe-Job-Id");
-        const savedOnServer = res.headers.get("X-Tribe-Saved-Paths");
-
-        const rawName = f.name || "video";
-        const stem = rawName.replace(/\.[^.]+$/, "") || "video";
-        const safeStem = stem.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "video";
-        const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-        const zipName = "tribe_" + safeStem + "_" + ts + ".zip";
-
-        // İndirmeyi önce yap: büyük ZIP'lerde JSZip önizlemesi patlarsa yine de dosya insin.
-        const dlUrl = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = dlUrl;
-        a.download = zipName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(dlUrl);
-
-        let okLine =
-          "Dosya indirildi: " +
-          zipName +
-          " (İndirilenler veya tarayıcının sorduğu klasör). Özet aşağıda.";
-        if (savedOnServer) {
-          okLine +=
-            " Sunucuda da kayıtlı (Modal volume): " +
-            savedOnServer.replace(/\|/g, " | ");
+        if (!out.jobId) {
+          throw new Error("Job oluşturulamadı.");
         }
-        if (jobId) {
-          okLine += " [job_id: " + jobId + "]";
-        }
-        setStatus("ok", okLine);
-
-        if (typeof JSZip !== "undefined") {
-          try {
-            const z = await JSZip.loadAsync(blob);
-            const metaFile = z.file("metadata.json");
-            if (metaFile) {
-              const txt = await metaFile.async("string");
-              try {
-                metaPreview.textContent = JSON.stringify(JSON.parse(txt), null, 2);
-              } catch {
-                metaPreview.textContent = txt;
-              }
-              metaPreview.style.display = "block";
-            }
-          } catch (zipErr) {
-            console.warn(zipErr);
-            metaPreview.style.display = "block";
-            metaPreview.textContent =
-              "(Önizleme açılamadı — ZIP çok büyük olabilir veya tarayıcı sınırı. Dosya indirildi.)";
-          }
-        }
+        renderJob(out.job || { id: out.jobId, status: out.status || "queued" });
+        await pollJob(out.jobId);
       } catch (e) {
         let msg = String(e.message || e);
         if (msg === "Failed to fetch" || msg.includes("NetworkError")) {
@@ -421,6 +413,16 @@
         btnRun.disabled = false;
         btnHealth.disabled = false;
       }
+    });
+
+    btnDownloadZip.addEventListener("click", () => {
+      if (!activeJobId) return;
+      const a = document.createElement("a");
+      a.href = "/api/jobs/zip/" + encodeURIComponent(activeJobId);
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     });
   </script>
 </body>

@@ -7,5 +7,7 @@ module.exports = (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({
     TRIBE_API_URL: (process.env.TRIBE_API_URL || "").trim(),
+    REPORT_ENABLED: true,
+    REPORT_MODE: "async",
   });
 };

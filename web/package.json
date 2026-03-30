@@ -1,0 +1,12 @@
+{
+  "name": "tribev2-web",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "formidable": "latest",
+    "jszip": "latest",
+    "numpy-parser": "latest"
+  }
+}
