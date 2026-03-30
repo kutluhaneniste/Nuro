@@ -1,19 +1,29 @@
 "use strict";
 
 const formidablePkg = require("formidable");
-/** formidable v3+: CJS'te modül nesnesi gelir; factory `formidable` veya `default`. */
-const createFormParser =
-  typeof formidablePkg === "function"
-    ? formidablePkg
-    : formidablePkg.formidable || formidablePkg.default;
+/**
+ * Vercel / farklı bundler’larda factory export kaybolabiliyor.
+ * `IncomingForm` doğrudan sınıf — her zaman CJS build’inde var.
+ */
+const IncomingForm =
+  formidablePkg.IncomingForm ||
+  formidablePkg.Formidable ||
+  (formidablePkg.default && formidablePkg.default.IncomingForm);
 const { createJob, publicJob } = require("./_jobs");
 const { runReportJob } = require("./_report");
 
 function parseForm(req) {
-  if (typeof createFormParser !== "function") {
-    return Promise.reject(new Error("formidable modülü yüklenemedi"));
+  if (typeof IncomingForm !== "function") {
+    return Promise.reject(
+      new Error(
+        "formidable.IncomingForm yüklenemedi (paket: " + typeof formidablePkg + ")"
+      )
+    );
   }
-  const form = createFormParser({ multiples: false, maxFileSize: 1024 * 1024 * 1024 });
+  const form = new IncomingForm({
+    multiples: false,
+    maxFileSize: 1024 * 1024 * 1024,
+  });
   return new Promise((resolve, reject) => {
     form.parse(req, (err, fields, files) => {
       if (err) reject(err);
