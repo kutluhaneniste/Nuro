@@ -1,11 +1,19 @@
 "use strict";
 
-const formidable = require("formidable");
+const formidablePkg = require("formidable");
+/** formidable v3+: CJS'te modül nesnesi gelir; factory `formidable` veya `default`. */
+const createFormParser =
+  typeof formidablePkg === "function"
+    ? formidablePkg
+    : formidablePkg.formidable || formidablePkg.default;
 const { createJob, publicJob } = require("./_jobs");
 const { runReportJob } = require("./_report");
 
 function parseForm(req) {
-  const form = formidable({ multiples: false, maxFileSize: 1024 * 1024 * 1024 });
+  if (typeof createFormParser !== "function") {
+    return Promise.reject(new Error("formidable modülü yüklenemedi"));
+  }
+  const form = createFormParser({ multiples: false, maxFileSize: 1024 * 1024 * 1024 });
   return new Promise((resolve, reject) => {
     form.parse(req, (err, fields, files) => {
       if (err) reject(err);
@@ -20,6 +28,12 @@ function normalizeBase(u) {
 
 function readField(v) {
   return Array.isArray(v) ? v[0] : v;
+}
+
+function headerApiKey(req) {
+  const h = req.headers || {};
+  const v = h["x-api-key"] || h["X-API-Key"];
+  return typeof v === "string" ? v.trim() : "";
 }
 
 module.exports = async (req, res) => {
@@ -49,7 +63,11 @@ module.exports = async (req, res) => {
     }
 
     const headers = {};
-    const upstreamKey = (process.env.TRIBE_UPSTREAM_API_KEY || "").trim();
+    const upstreamKey = (
+      process.env.TRIBE_UPSTREAM_API_KEY ||
+      headerApiKey(req) ||
+      ""
+    ).trim();
     if (upstreamKey) headers["X-API-Key"] = upstreamKey;
 
     const upstreamForm = new FormData();

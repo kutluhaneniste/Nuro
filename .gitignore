@@ -5,3 +5,4 @@ venv/
 .env
 *.zip
 .cache/
+node_modules/
