@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TRIBE v2 — video test</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous"></script>
+  <style>
+    :root {
+      --bg: #0c0f14;
+      --surface: #151a22;
+      --border: #2a3344;
+      --text: #e8ecf4;
+      --muted: #8b95a8;
+      --accent: #5eead4;
+      --accent-dim: #2dd4bf33;
+      --danger: #f87171;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "DM Sans", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      background-image:
+        radial-gradient(ellipse 80% 50% at 50% -20%, #2dd4bf18, transparent),
+        radial-gradient(ellipse 60% 40% at 100% 100%, #6366f112, transparent);
+    }
+    .wrap {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 2.5rem 1.25rem 4rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin: 0 0 0.35rem;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.35rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+    input[type="url"],
+    input[type="password"],
+    input[type="text"] {
+      width: 100%;
+      padding: 0.65rem 0.85rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.85rem;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    .file-row {
+      margin-top: 1rem;
+    }
+    input[type="file"] {
+      width: 100%;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem;
+      margin-top: 1.25rem;
+    }
+    button {
+      font-family: inherit;
+      font-weight: 600;
+      font-size: 0.9rem;
+      padding: 0.7rem 1.2rem;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.12s ease, opacity 0.12s;
+    }
+    button:active { transform: scale(0.98); }
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #2dd4bf, #14b8a6);
+      color: #042f2e;
+    }
+    .btn-secondary {
+      background: transparent;
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { color: var(--text); border-color: var(--muted); }
+    .status {
+      margin-top: 1rem;
+      padding: 0.85rem 1rem;
+      border-radius: 8px;
+      font-size: 0.88rem;
+      display: none;
+    }
+    .status.show { display: block; }
+    .status.info {
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .status.ok {
+      background: #064e3b33;
+      border: 1px solid #10b98155;
+      color: #6ee7b7;
+    }
+    .status.err {
+      background: #450a0a44;
+      border: 1px solid #f8717155;
+      color: var(--danger);
+    }
+    pre.meta {
+      margin: 1rem 0 0;
+      padding: 1rem;
+      background: var(--bg);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-family: "JetBrains Mono", monospace;
+      font-size: 0.75rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #a5b4fc;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 0.5rem;
+    }
+    code { font-family: "JetBrains Mono", monospace; font-size: 0.85em; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>TRIBE v2 test</h1>
+    <p class="sub">Modal API’ne video gönder; tarayıcı ZIP dosyasını indirir (<code>metadata.json</code> + <code>preds.npz</code>) — İndirilenler klasörüne veya seçtiğin klasöre kaydedilir. İlk çalıştırma (soğuk model) uzun sürebilir.</p>
+
+    <div class="card" id="fileWarn" style="display:none;border-color:#f59e0b55;background:#42200633;">
+      <strong style="color:#fbbf24">file:// ile açıldı</strong>
+      <p class="hint" style="margin:0.5rem 0 0;">Sayfayı <strong>dosyadan çift tıklayarak</strong> açmış olabilirsin; bu yüzden istekler engellenir. Terminalde proje klasöründe: <code>python3 serve.py</code> (içinde <code>web/</code> olmalı) — tarayıcı genelde kendisi açılır. Olmazsa adres çubuğuna elle yapıştır: <a href="http://127.0.0.1:8765/" style="color:#5eead4">http://127.0.0.1:8765/</a></p>
+    </div>
+
+    <div class="card">
+      <label for="baseUrl">Modal API kök URL</label>
+      <input type="url" id="baseUrl" placeholder="https://senin-workspace--tribe-v2.modal.run" autocomplete="off" />
+      <p class="hint">Buraya <strong>Modal</strong> adresi (<code>…modal.run</code>). <strong>127.0.0.1 veya localhost yazma</strong> — o sadece bu sayfayı açmak için; video isteği oraya giderse 501 hatası alırsın.</p>
+
+      <label for="apiKey" style="margin-top:1rem;">X-API-Key (isteğe bağlı)</label>
+      <input type="password" id="apiKey" placeholder="TRIBE_API_KEY tanımlıysa" autocomplete="off" />
+
+      <div class="file-row">
+        <label for="video">Video</label>
+        <input type="file" id="video" accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,.mp4,.mov,.avi,.mkv,.webm" />
+      </div>
+
+      <div class="actions">
+        <button type="button" class="btn-primary" id="btnRun">Çalıştır</button>
+        <button type="button" class="btn-secondary" id="btnHealth">Health</button>
+      </div>
+
+      <div class="status info" id="status"></div>
+      <pre class="meta" id="metaPreview" style="display:none;"></pre>
+    </div>
+  </div>
+
+  <script>
+    const LS_URL = "tribe_modal_base_url";
+    const LS_KEY = "tribe_modal_api_key";
+
+    const baseUrl = document.getElementById("baseUrl");
+    const apiKey = document.getElementById("apiKey");
+    const video = document.getElementById("video");
+    const btnRun = document.getElementById("btnRun");
+    const btnHealth = document.getElementById("btnHealth");
+    const statusEl = document.getElementById("status");
+    const metaPreview = document.getElementById("metaPreview");
+
+    function normalizeBase(u) {
+      return (u || "").trim().replace(/\/+$/, "");
+    }
+
+    /** Yerel sayfa sunucusu (127.0.0.1) — Modal API değil; POST buraya giderse 501 alırsın. */
+    function looksLikeLocalDevServer(base) {
+      try {
+        const h = new URL(base).hostname;
+        return h === "localhost" || h === "127.0.0.1" || h === "::1";
+      } catch {
+        return false;
+      }
+    }
+
+    if (window.location.protocol === "file:") {
+      document.getElementById("fileWarn").style.display = "block";
+    }
+
+    baseUrl.value = localStorage.getItem(LS_URL) || "";
+    apiKey.value = localStorage.getItem(LS_KEY) || "";
+
+    /** Vercel’de TRIBE_API_URL env ile; yerelde /api/config yoksa sessizce atlanır. */
+    (async function loadServerDefaultUrl() {
+      try {
+        const r = await fetch("/api/config", { credentials: "omit" });
+        if (!r.ok) return;
+        const data = await r.json();
+        const u = (data && data.TRIBE_API_URL) || "";
+        if (!u) return;
+        if (!localStorage.getItem(LS_URL) && !baseUrl.value.trim()) {
+          baseUrl.value = u.replace(/\/+$/, "");
+        }
+      } catch (_) {
+        /* Yerel python serve.py — /api yok */
+      }
+    })();
+
+    function persistUrl() {
+      localStorage.setItem(LS_URL, normalizeBase(baseUrl.value));
+    }
+    baseUrl.addEventListener("change", persistUrl);
+    baseUrl.addEventListener("blur", persistUrl);
+    baseUrl.addEventListener("input", persistUrl);
+    apiKey.addEventListener("change", () => {
+      localStorage.setItem(LS_KEY, apiKey.value);
+    });
+
+    function setStatus(kind, text) {
+      statusEl.className = "status show " + (kind || "info");
+      statusEl.textContent = text;
+    }
+
+    function hideMeta() {
+      metaPreview.style.display = "none";
+      metaPreview.textContent = "";
+    }
+
+    btnHealth.addEventListener("click", async () => {
+      const base = normalizeBase(baseUrl.value);
+      if (!base) {
+        setStatus("err", "Önce Modal URL’ini yaz.");
+        return;
+      }
+      if (looksLikeLocalDevServer(base)) {
+        setStatus(
+          "err",
+          "Yanlış adres: 127.0.0.1 / localhost Modal API değil. modal deploy çıktısındaki https://…--tribe-v2.modal.run adresini yapıştır."
+        );
+        return;
+      }
+      localStorage.setItem(LS_URL, base);
+      hideMeta();
+      setStatus("info", "Health kontrol ediliyor…");
+      btnHealth.disabled = true;
+      try {
+        const headers = {};
+        const k = apiKey.value.trim();
+        if (k) headers["X-API-Key"] = k;
+        const res = await fetch(base + "/health", { headers, credentials: "omit" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(res.status + " " + (data.detail || res.statusText));
+        setStatus("ok", "Health: " + JSON.stringify(data));
+      } catch (e) {
+        setStatus("err", String(e.message || e));
+      } finally {
+        btnHealth.disabled = false;
+      }
+    });
+
+    btnRun.addEventListener("click", async () => {
+      const base = normalizeBase(baseUrl.value);
+      if (!base) {
+        setStatus("err", "Modal URL gerekli.");
+        return;
+      }
+      if (looksLikeLocalDevServer(base)) {
+        setStatus(
+          "err",
+          "Yanlış adres: 127.0.0.1 / localhost Modal API değil. Üstteki alana modal deploy ile gelen https://…--tribe-v2.modal.run adresini yaz (video buraya POST edilmez)."
+        );
+        return;
+      }
+      const f = video.files?.[0];
+      if (!f) {
+        setStatus("err", "Bir video seç.");
+        return;
+      }
+      localStorage.setItem(LS_URL, base);
+      if (apiKey.value) localStorage.setItem(LS_KEY, apiKey.value);
+
+      hideMeta();
+      setStatus("info", "Gönderiliyor… Model soğuksa birkaç dakika sürebilir, pencereyi kapatma.");
+      btnRun.disabled = true;
+      btnHealth.disabled = true;
+
+      const form = new FormData();
+      form.append("file", f, f.name);
+
+      const headers = {};
+      const k = apiKey.value.trim();
+      if (k) headers["X-API-Key"] = k;
+
+      try {
+        const res = await fetch(base + "/predict", {
+          method: "POST",
+          body: form,
+          headers,
+          credentials: "omit",
+        });
+        const blob = await res.blob();
+        if (!res.ok) {
+          const t = await blob.text();
+          let detail = t;
+          try {
+            const j = JSON.parse(t);
+            if (Array.isArray(j.detail)) {
+              detail = j.detail.map((x) => x.msg || JSON.stringify(x)).join("; ");
+            } else {
+              detail = j.detail || t;
+            }
+          } catch {
+            /* plain text body */
+          }
+          throw new Error(res.status + " " + detail);
+        }
+
+        const jobId = res.headers.get("X-Tribe-Job-Id");
+        const savedOnServer = res.headers.get("X-Tribe-Saved-Paths");
+
+        const rawName = f.name || "video";
+        const stem = rawName.replace(/\.[^.]+$/, "") || "video";
+        const safeStem = stem.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "video";
+        const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        const zipName = "tribe_" + safeStem + "_" + ts + ".zip";
+
+        // İndirmeyi önce yap: büyük ZIP'lerde JSZip önizlemesi patlarsa yine de dosya insin.
+        const dlUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = dlUrl;
+        a.download = zipName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(dlUrl);
+
+        let okLine =
+          "Dosya indirildi: " +
+          zipName +
+          " (İndirilenler veya tarayıcının sorduğu klasör). Özet aşağıda.";
+        if (savedOnServer) {
+          okLine +=
+            " Sunucuda da kayıtlı (Modal volume): " +
+            savedOnServer.replace(/\|/g, " | ");
+        }
+        if (jobId) {
+          okLine += " [job_id: " + jobId + "]";
+        }
+        setStatus("ok", okLine);
+
+        if (typeof JSZip !== "undefined") {
+          try {
+            const z = await JSZip.loadAsync(blob);
+            const metaFile = z.file("metadata.json");
+            if (metaFile) {
+              const txt = await metaFile.async("string");
+              try {
+                metaPreview.textContent = JSON.stringify(JSON.parse(txt), null, 2);
+              } catch {
+                metaPreview.textContent = txt;
+              }
+              metaPreview.style.display = "block";
+            }
+          } catch (zipErr) {
+            console.warn(zipErr);
+            metaPreview.style.display = "block";
+            metaPreview.textContent =
+              "(Önizleme açılamadı — ZIP çok büyük olabilir veya tarayıcı sınırı. Dosya indirildi.)";
+          }
+        }
+      } catch (e) {
+        let msg = String(e.message || e);
+        if (msg === "Failed to fetch" || msg.includes("NetworkError")) {
+          msg +=
+            " — Ağ/CORS: yerelde http://127.0.0.1 ile aç (file:// değil); Vercel’de Modal URL ve CORS doğru mu?";
+        }
+        setStatus("err", msg);
+      } finally {
+        btnRun.disabled = false;
+        btnHealth.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

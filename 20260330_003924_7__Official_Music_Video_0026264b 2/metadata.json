@@ -1,0 +1,13 @@
+{
+  "preds_shape": [
+    410,
+    20484
+  ],
+  "preds_dtype": "float32",
+  "n_segments": 410,
+  "n_vertices": 20484,
+  "n_segment_objects": 410,
+  "tr_seconds": 1.0,
+  "original_filename": "7 (Official Music Video).mp4",
+  "job_id": "0026264b-535f-4b09-b41c-0ae6a3cb6278"
+}
