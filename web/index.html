@@ -170,7 +170,7 @@
 <body>
   <div class="wrap">
     <h1>TRIBE v2 test</h1>
-    <p class="sub">Vercel’de Claude raporu için video ~4 MB altı olmalı (sunucu gövde sınırı). Daha büyük dosyalar otomatik olarak doğrudan Modal’a gider, ZIP indirilir; rapor bu modda üretilmez. İlk çalıştırma uzun sürebilir.</p>
+    <p class="sub"><strong>1)</strong> Video’yu Modal’da işlet, dönen <code>tribe_…zip</code> dosyasını bilgisayarına kaydet (uzun sürebilir; sekme açık kalsın). <strong>2)</strong> Aşağıdan aynı ZIP’i yükleyerek Claude raporunu Vercel’de üret. ZIP ~4 MB üzerindeyse Vercel raporu alamaz (plan sınırı).</p>
 
     <div class="card" id="fileWarn" style="display:none;border-color:#f59e0b55;background:#42200633;">
       <strong style="color:#fbbf24">file:// ile açıldı</strong>
@@ -178,6 +178,7 @@
     </div>
 
     <div class="card">
+      <h2 style="font-size:1rem;margin:0 0 1rem;color:var(--muted);font-weight:600;">Video → Modal (ZIP indir)</h2>
       <label for="baseUrl">Modal API kök URL</label>
       <input type="url" id="baseUrl" placeholder="https://senin-workspace--tribe-v2.modal.run" autocomplete="off" />
       <p class="hint">Buraya <strong>Modal</strong> adresi (<code>…modal.run</code>). <strong>127.0.0.1 veya localhost yazma</strong> — o sadece bu sayfayı açmak için; video isteği oraya giderse 501 hatası alırsın.</p>
@@ -195,9 +196,22 @@
         <button type="button" class="btn-secondary" id="btnHealth">Health</button>
       </div>
 
-      <div class="status info" id="status"></div>
+      <div class="status info" id="statusVideo"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="font-size:1rem;margin:0 0 1rem;color:var(--muted);font-weight:600;">ZIP yükle → Claude raporu</h2>
+      <p class="hint" style="margin:0 0 0.75rem;">Modal’dan indirdiğin <code>metadata.json</code> + <code>preds.npz</code> içeren ZIP’i seç. İsteğe bağlı video adı rapora bağlamak için.</p>
+      <label for="zipFile">TRIBE çıktı ZIP</label>
+      <input type="file" id="zipFile" accept=".zip,application/zip" />
+      <label for="zipLabel" style="margin-top:1rem;">Kaynak video adı (isteğe bağlı)</label>
+      <input type="text" id="zipLabel" placeholder="ör. klip.mp4" autocomplete="off" />
+      <div class="actions">
+        <button type="button" class="btn-primary" id="btnReportZip">Rapor üret</button>
+      </div>
+      <div class="status info" id="statusZip"></div>
       <div class="actions" id="jobActions" style="display:none;">
-        <button type="button" class="btn-secondary" id="btnDownloadZip">ZIP indir</button>
+        <button type="button" class="btn-secondary" id="btnDownloadZip">ZIP indir (sunucudaki kopya)</button>
       </div>
       <pre class="meta" id="reportPreview" style="display:none;"></pre>
       <pre class="meta" id="metaPreview" style="display:none;"></pre>
@@ -215,7 +229,11 @@
     const video = document.getElementById("video");
     const btnRun = document.getElementById("btnRun");
     const btnHealth = document.getElementById("btnHealth");
-    const statusEl = document.getElementById("status");
+    const statusVideo = document.getElementById("statusVideo");
+    const statusZip = document.getElementById("statusZip");
+    const zipFile = document.getElementById("zipFile");
+    const zipLabel = document.getElementById("zipLabel");
+    const btnReportZip = document.getElementById("btnReportZip");
     const metaPreview = document.getElementById("metaPreview");
     const reportPreview = document.getElementById("reportPreview");
     const jobActions = document.getElementById("jobActions");
@@ -269,9 +287,10 @@
       localStorage.setItem(LS_KEY, apiKey.value);
     });
 
-    function setStatus(kind, text) {
-      statusEl.className = "status show " + (kind || "info");
-      statusEl.textContent = text;
+    function setStatus(kind, text, el) {
+      const node = el || statusVideo;
+      node.className = "status show " + (kind || "info");
+      node.textContent = text;
     }
 
     function hideMeta() {
@@ -282,17 +301,18 @@
       jobActions.style.display = "none";
     }
 
-    function renderJob(job) {
+    function renderJob(job, statusNode) {
       if (!job) return;
+      const st = statusNode || statusZip;
       const parts = ["Job: " + job.id, "Durum: " + job.status];
       if (job.modalJobId) parts.push("Modal job: " + job.modalJobId);
       if (job.modalSavedPaths) parts.push("Modal kayıt: " + String(job.modalSavedPaths));
       if (job.status === "done") {
-        setStatus("ok", parts.join(" | "));
+        setStatus("ok", parts.join(" | "), st);
       } else if (job.status === "error") {
-        setStatus("err", parts.join(" | ") + " | Hata: " + (job.error || "bilinmiyor"));
+        setStatus("err", parts.join(" | ") + " | Hata: " + (job.error || "bilinmiyor"), st);
       } else {
-        setStatus("info", parts.join(" | "));
+        setStatus("info", parts.join(" | "), st);
       }
 
       if (job.metadata) {
@@ -308,15 +328,16 @@
       }
     }
 
-    async function pollJob(jobId) {
+    async function pollJob(jobId, statusNode) {
       activeJobId = jobId;
+      const st = statusNode || statusZip;
       for (;;) {
         const res = await fetch("/api/jobs/" + encodeURIComponent(jobId), {
           credentials: "omit",
         });
         const job = await res.json();
         if (!res.ok) throw new Error(job.error || ("Job okunamadı: " + res.status));
-        renderJob(job);
+        renderJob(job, st);
         if (job.status === "done" || job.status === "error") return job;
         await new Promise((r) => setTimeout(r, 2500));
       }
@@ -384,100 +405,80 @@
       if (k) headers["X-API-Key"] = k;
 
       try {
-        const tooBigForVercel = f.size > MAX_VERCEL_UPLOAD_BYTES;
+        setStatus(
+          "info",
+          "Modal analiz ediliyor (birkaç dakika sürebilir); pencereyi kapatma. Bu adım Vercel’de değil, doğrudan Modal’da çalışır (504 riski yok)."
+        );
+        const formModal = new FormData();
+        formModal.append("file", f, f.name);
+        const res = await fetch(base + "/predict", {
+          method: "POST",
+          body: formModal,
+          headers,
+          credentials: "omit",
+        });
+        const blob = await res.blob();
+        if (!res.ok) {
+          const t = await blob.text();
+          let detail = t;
+          try {
+            const j = JSON.parse(t);
+            detail = Array.isArray(j.detail)
+              ? j.detail.map((x) => x.msg || JSON.stringify(x)).join("; ")
+              : j.detail || t;
+          } catch {
+            /* plain */
+          }
+          throw new Error(res.status + " " + detail);
+        }
 
-        if (tooBigForVercel) {
-          setStatus(
-            "info",
-            "Dosya ~" +
-              (f.size / (1024 * 1024)).toFixed(1) +
-              " MB — Vercel tek istekte ~4.5 MB sınırı var (413). Video doğrudan Modal’a gidiyor; Claude raporu bu yüklemede yok. Rapor için daha küçük/sıkıştırılmış clip kullan."
-          );
-          const formModal = new FormData();
-          formModal.append("file", f, f.name);
-          const res = await fetch(base + "/predict", {
-            method: "POST",
-            body: formModal,
-            headers,
-            credentials: "omit",
-          });
-          const blob = await res.blob();
-          if (!res.ok) {
-            const t = await blob.text();
-            let detail = t;
-            try {
-              const j = JSON.parse(t);
-              detail = Array.isArray(j.detail)
-                ? j.detail.map((x) => x.msg || JSON.stringify(x)).join("; ")
-                : j.detail || t;
-            } catch {
-              /* plain */
-            }
-            throw new Error(res.status + " " + detail);
-          }
-          const jobId = res.headers.get("X-Tribe-Job-Id");
-          const savedOnServer = res.headers.get("X-Tribe-Saved-Paths");
-          const rawName = f.name || "video";
-          const stem = rawName.replace(/\.[^.]+$/, "") || "video";
-          const safeStem = stem.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "video";
-          const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-          const zipName = "tribe_" + safeStem + "_" + ts + ".zip";
-          const dlUrl = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = dlUrl;
-          a.download = zipName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(dlUrl);
-          let okLine =
-            "ZIP indirildi: " + zipName + ". Claude raporu için Vercel yolunu kullanmak üzere dosyayı ~4 MB altına indir.";
-          if (savedOnServer)
-            okLine += " Modal volume: " + savedOnServer.replace(/\|/g, " | ");
-          if (jobId) okLine += " [job: " + jobId + "]";
-          setStatus("ok", okLine);
-          activeJobId = null;
-          jobActions.style.display = "none";
-          if (typeof JSZip !== "undefined") {
-            try {
-              const z = await JSZip.loadAsync(blob);
-              const metaFile = z.file("metadata.json");
-              if (metaFile) {
-                const txt = await metaFile.async("string");
-                try {
-                  metaPreview.textContent = JSON.stringify(JSON.parse(txt), null, 2);
-                } catch {
-                  metaPreview.textContent = txt;
-                }
-                metaPreview.style.display = "block";
+        const modalJobId = res.headers.get("X-Tribe-Job-Id");
+        const savedOnServer = res.headers.get("X-Tribe-Saved-Paths");
+        const zipBytes = blob.size;
+
+        const rawName = f.name || "video";
+        const stem = rawName.replace(/\.[^.]+$/, "") || "video";
+        const safeStem = stem.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 80) || "video";
+        const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+        const zipName = "tribe_" + safeStem + "_" + ts + ".zip";
+        const dlUrl = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = dlUrl;
+        a.download = zipName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(dlUrl);
+
+        let okLine =
+          "ZIP indirildi: " +
+          zipName +
+          " (~" +
+          (zipBytes / (1024 * 1024)).toFixed(1) +
+          " MB). Claude raporu için bu dosyayı aşağıdaki «ZIP yükle» bölümünden yükle.";
+        if (savedOnServer)
+          okLine += " Modal volume: " + savedOnServer.replace(/\|/g, " | ");
+        if (modalJobId) okLine += " [Modal job: " + modalJobId + "]";
+        setStatus("ok", okLine, statusVideo);
+        activeJobId = null;
+        jobActions.style.display = "none";
+
+        if (typeof JSZip !== "undefined") {
+          try {
+            const z = await JSZip.loadAsync(blob);
+            const metaFile = z.file("metadata.json");
+            if (metaFile) {
+              const txt = await metaFile.async("string");
+              try {
+                metaPreview.textContent = JSON.stringify(JSON.parse(txt), null, 2);
+              } catch {
+                metaPreview.textContent = txt;
               }
-            } catch (zipErr) {
-              console.warn(zipErr);
+              metaPreview.style.display = "block";
             }
+          } catch (zipErr) {
+            console.warn(zipErr);
           }
-        } else {
-          setStatus("info", "Gönderiliyor… Modal çıktısı + Claude raporu (Vercel).");
-          const form = new FormData();
-          form.append("file", f, f.name);
-          form.append("modalBaseUrl", base);
-          const res = await fetch("/api/predict-and-report", {
-            method: "POST",
-            body: form,
-            headers,
-            credentials: "omit",
-          });
-          const out = await res.json().catch(() => ({}));
-          if (!res.ok) {
-            if (res.status === 413) {
-              throw new Error(
-                "413 İstek çok büyük — Vercel gövde sınırı. Videoyu küçült veya doğrudan Modal kullan (daha büyük dosyalar otomatik o yola düşmeliydi)."
-              );
-            }
-            throw new Error(res.status + " " + (out.error || "İstek başarısız"));
-          }
-          if (!out.jobId) throw new Error("Job oluşturulamadı.");
-          renderJob(out.job || { id: out.jobId, status: out.status || "queued" });
-          await pollJob(out.jobId);
         }
       } catch (e) {
         let msg = String(e.message || e);
@@ -500,6 +501,75 @@
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+    });
+
+    btnReportZip.addEventListener("click", async () => {
+      const zf = zipFile.files?.[0];
+      if (!zf) {
+        setStatus("err", "TRIBE çıktı ZIP dosyasını seç.", statusZip);
+        return;
+      }
+      if (!/\.zip$/i.test(zf.name)) {
+        setStatus("err", "Dosya uzantısı .zip olmalı.", statusZip);
+        return;
+      }
+      if (zf.size > MAX_VERCEL_UPLOAD_BYTES) {
+        setStatus(
+          "err",
+          "ZIP ~" +
+            (zf.size / (1024 * 1024)).toFixed(1) +
+            " MB — Vercel gövde sınırı ~4.5 MB. Daha kısa video ile yeniden üret veya plan yükselt.",
+          statusZip
+        );
+        return;
+      }
+
+      hideMeta();
+      reportPreview.style.display = "none";
+      metaPreview.style.display = "none";
+      jobActions.style.display = "none";
+      activeJobId = null;
+
+      setStatus("info", "ZIP Vercel’e gönderiliyor, rapor hazırlanıyor…", statusZip);
+      btnReportZip.disabled = true;
+      btnRun.disabled = true;
+      btnHealth.disabled = true;
+
+      const formZip = new FormData();
+      formZip.append("file", zf, zf.name);
+      const label = zipLabel.value.trim();
+      formZip.append(
+        "originalFilename",
+        label || zf.name.replace(/\.zip$/i, "") + ".mp4"
+      );
+
+      try {
+        const r2 = await fetch("/api/report-from-zip", {
+          method: "POST",
+          body: formZip,
+          credentials: "omit",
+        });
+        const out = await r2.json().catch(() => ({}));
+        if (!r2.ok) {
+          if (r2.status === 413) {
+            throw new Error("413 ZIP çok büyük — Vercel limiti.");
+          }
+          throw new Error(r2.status + " " + (out.error || "Rapor isteği başarısız"));
+        }
+        if (!out.jobId) throw new Error("Job oluşturulamadı.");
+        renderJob(out.job || { id: out.jobId, status: out.status || "queued" }, statusZip);
+        await pollJob(out.jobId, statusZip);
+      } catch (e) {
+        let msg = String(e.message || e);
+        if (msg === "Failed to fetch" || msg.includes("NetworkError")) {
+          msg += " — Sayfayı Vercel production adresinden aç; file:// değil.";
+        }
+        setStatus("err", msg, statusZip);
+      } finally {
+        btnReportZip.disabled = false;
+        btnRun.disabled = false;
+        btnHealth.disabled = false;
+      }
     });
   </script>
 </body>

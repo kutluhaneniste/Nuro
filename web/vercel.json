@@ -4,7 +4,7 @@
       "memory": 128,
       "maxDuration": 10
     },
-    "api/predict-and-report.js": {
+    "api/report-from-zip.js": {
       "memory": 1024,
       "maxDuration": 300
     },
