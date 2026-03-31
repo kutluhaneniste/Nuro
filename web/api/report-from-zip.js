@@ -2,7 +2,7 @@
 
 const fs = require("node:fs/promises");
 const { parseMultipart } = require("./_multipart");
-const { createJob, publicJob } = require("./_jobs");
+const { createJob, publicJob, getJob } = require("./_jobs");
 const { runReportJob } = require("./_report");
 
 function readField(v) {
@@ -36,14 +36,13 @@ module.exports = async (req, res) => {
       originalFilename,
     });
 
-    setTimeout(() => {
-      runReportJob(rec.id).catch(() => {});
-    }, 0);
-
-    res.status(202).json({
+    /** Aynı invocation içinde bitir: Vercel’de bellek job store örnekler arası paylaşılmaz; async+poll → "job bulunamadı". */
+    await runReportJob(rec.id);
+    const finalRec = getJob(rec.id);
+    res.status(200).json({
       jobId: rec.id,
-      status: rec.status,
-      job: publicJob(rec),
+      status: finalRec ? finalRec.status : rec.status,
+      job: publicJob(finalRec || rec),
     });
   } catch (e) {
     res.status(500).json({ error: String(e && e.message ? e.message : e) });

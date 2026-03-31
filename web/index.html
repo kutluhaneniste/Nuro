@@ -301,9 +301,10 @@
       jobActions.style.display = "none";
     }
 
-    function renderJob(job, statusNode) {
+    function renderJob(job, statusNode, opts) {
       if (!job) return;
       const st = statusNode || statusZip;
+      const showDl = !opts || opts.showServerZipDownload !== false;
       const parts = ["Job: " + job.id, "Durum: " + job.status];
       if (job.modalJobId) parts.push("Modal job: " + job.modalJobId);
       if (job.modalSavedPaths) parts.push("Modal kayıt: " + String(job.modalSavedPaths));
@@ -323,23 +324,10 @@
         reportPreview.textContent = job.reportMarkdown;
         reportPreview.style.display = "block";
       }
-      if (job.id) {
+      if (job.id && showDl) {
         jobActions.style.display = "flex";
-      }
-    }
-
-    async function pollJob(jobId, statusNode) {
-      activeJobId = jobId;
-      const st = statusNode || statusZip;
-      for (;;) {
-        const res = await fetch("/api/jobs/" + encodeURIComponent(jobId), {
-          credentials: "omit",
-        });
-        const job = await res.json();
-        if (!res.ok) throw new Error(job.error || ("Job okunamadı: " + res.status));
-        renderJob(job, st);
-        if (job.status === "done" || job.status === "error") return job;
-        await new Promise((r) => setTimeout(r, 2500));
+      } else if (!showDl) {
+        jobActions.style.display = "none";
       }
     }
 
@@ -556,9 +544,9 @@
           }
           throw new Error(r2.status + " " + (out.error || "Rapor isteği başarısız"));
         }
-        if (!out.jobId) throw new Error("Job oluşturulamadı.");
-        renderJob(out.job || { id: out.jobId, status: out.status || "queued" }, statusZip);
-        await pollJob(out.jobId, statusZip);
+        if (!out.jobId || !out.job) throw new Error("Yanıt eksik.");
+        activeJobId = out.jobId;
+        renderJob(out.job, statusZip, { showServerZipDownload: false });
       } catch (e) {
         let msg = String(e.message || e);
         if (msg === "Failed to fetch" || msg.includes("NetworkError")) {
