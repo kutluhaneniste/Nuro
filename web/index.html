@@ -542,6 +542,14 @@
           if (r2.status === 413) {
             throw new Error("413 ZIP çok büyük — Vercel limiti.");
           }
+          if (r2.status === 401 || r2.status === 403) {
+            throw new Error(
+              r2.status +
+                " Bu adres Vercel tarafından kilitli olabilir (Deployment Protection). " +
+                "Vercel → Project → Settings → Deployment Protection: Production için kapat veya " +
+                "asıl production domain’ini kullan (hash’li …-projects.vercel.app preview’ları sık sık kilitlidir)."
+            );
+          }
           throw new Error(r2.status + " " + (out.error || "Rapor isteği başarısız"));
         }
         if (!out.jobId || !out.job) throw new Error("Yanıt eksik.");
